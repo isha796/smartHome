@@ -21,7 +21,9 @@ import (
 type Block struct {
 	Index     int
 	Timestamp string
-	       int
+	DeviceNum int
+	DeviceType string
+	Status bool
 	Hash      string
 	PrevHash  string
 }
@@ -29,9 +31,11 @@ type Block struct {
 // Blockchain is a series of validated Blocks
 var Blockchain []Block
 
-// Message takes incoming JSON payload for writing heart rate
+// Message takes incoming JSON payload for writing status of electrical appliance
 type Message struct {
-	BPM int
+	DeviceNum int
+	DeviceType string
+	Status bool
 }
 
 var mutex = &sync.Mutex{}
@@ -44,12 +48,12 @@ func main() {
 
 	go func() {
 		t := time.Now()
-		genesisBlock := Block{}
-		genesisBlock = Block{0, t.String(), 0, calculateHash(genesisBlock), ""}
-		spew.Dump(genesisBlock)
+		firstBlock := Block{}
+		firstBlock = Block{0, t.String(), 0, "", false, calculateHash(firstBlock), ""}
+		spew.Dump(firstBlock)
 
 		mutex.Lock()
-		Blockchain = append(Blockchain, genesisBlock)
+		Blockchain = append(Blockchain, firstBlock)
 		mutex.Unlock()
 	}()
 	log.Fatal(run())
@@ -94,7 +98,7 @@ func handleGetBlockchain(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(bytes))
 }
 
-// takes JSON payload as an input for heart rate (BPM)
+// takes JSON payload as an input 
 func handleWriteBlock(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var m Message
@@ -107,7 +111,7 @@ func handleWriteBlock(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	mutex.Lock()
-	newBlock := generateBlock(Blockchain[len(Blockchain)-1], m.BPM)
+	newBlock := generateBlock(Blockchain[len(Blockchain)-1], m.DeviceNum, m.DeviceType, m.Status)
 	mutex.Unlock()
 
 	if isBlockValid(newBlock, Blockchain[len(Blockchain)-1]) {
@@ -149,7 +153,7 @@ func isBlockValid(newBlock, oldBlock Block) bool {
 
 // SHA256 hasing
 func calculateHash(block Block) string {
-	record := strconv.Itoa(block.Index) + block.Timestamp + strconv.Itoa(block.BPM) + block.PrevHash
+	record := strconv.Itoa(block.Index) + block.Timestamp + strconv.Itoa(block.DeviceNum) + block.DeviceType + strconv.FormatBool(block.Status) + block.PrevHash
 	h := sha256.New()
 	h.Write([]byte(record))
 	hashed := h.Sum(nil)
@@ -157,7 +161,7 @@ func calculateHash(block Block) string {
 }
 
 // create a new block using previous block's hash
-func generateBlock(oldBlock Block, BPM int) Block {
+func generateBlock(oldBlock Block, DeviceNum int, DeviceType string, Status bool) Block {
 
 	var newBlock Block
 
@@ -165,7 +169,9 @@ func generateBlock(oldBlock Block, BPM int) Block {
 
 	newBlock.Index = oldBlock.Index + 1
 	newBlock.Timestamp = t.String()
-	newBlock.BPM = BPM
+	newBlock.DeviceNum = DeviceNum
+	newBlock.DeviceType = DeviceType
+	newBlock.Status = Status
 	newBlock.PrevHash = oldBlock.Hash
 	newBlock.Hash = calculateHash(newBlock)
 
